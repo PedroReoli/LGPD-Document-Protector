@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LGPD Document Protector</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <i class="fas fa-shield-alt fa-2x" style="color: #3498db;"></i>
+        <h1>LGPD Document Protector</h1>
+      </div>
+      <div class="header-actions">
+        <button id="open-image-btn" class="btn">
+          <i class="fas fa-image"></i>
+          Abrir Imagem
+        </button>
+        <button id="open-pdf-btn" class="btn">
+          <i class="fas fa-file-pdf"></i>
+          Abrir PDF
+        </button>
+        <button id="save-image-btn" class="btn">
+          <i class="fas fa-save"></i>
+          Salvar
+        </button>
+        <button id="theme-toggle" class="btn btn-icon btn-secondary">
+          <i class="fas fa-moon"></i>
+        </button>
+        <button id="info-button" class="btn btn-icon btn-secondary">
+          <i class="fas fa-info"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-button active" data-tab="edit">
+        <i class="fas fa-edit"></i> Editar
+      </button>
+      <button class="tab-button" data-tab="settings">
+        <i class="fas fa-cog"></i> Configurações
+      </button>
+      <button class="tab-button" data-tab="help">
+        <i class="fas fa-question-circle"></i> Ajuda
+      </button>
+    </div>
+
+    <div class="main-content">
+      <div class="canvas-container">
+        <canvas id="main-canvas"></canvas>
+        <div class="canvas-overlay">
+          <div class="zoom-controls">
+            <button id="zoom-in-btn" class="btn btn-icon btn-secondary">
+              <i class="fas fa-search-plus"></i>
+            </button>
+            <button id="zoom-out-btn" class="btn btn-icon btn-secondary">
+              <i class="fas fa-search-minus"></i>
+            </button>
+            <button id="zoom-reset-btn" class="btn btn-icon btn-secondary">
+              <i class="fas fa-sync-alt"></i>
+            </button>
+            <span id="zoom-level">Zoom: 100%</span>
+          </div>
+        </div>
+        <div id="pdf-navigation" class="pdf-navigation">
+          <button id="prev-page-btn" class="btn btn-secondary">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span id="page-indicator">Página 1/1</span>
+          <button id="next-page-btn" class="btn btn-secondary">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="history-container">
+        <h3>Histórico</h3>
+        <canvas id="history-canvas"></canvas>
+      </div>
+
+      <div class="sidebar">
+        <div id="edit-tab" class="tab-content active">
+          <div class="sidebar-section">
+            <h3>Ferramentas</h3>
+            <div class="tool-options">
+              <div class="tool-option">
+                <input type="radio" name="tool" id="brush-tool" value="brush" checked>
+                <label for="brush-tool">
+                  <i class="fas fa-paint-brush tool-icon"></i>
+                  <span class="tool-name">Pincel</span>
+                </label>
+              </div>
+              <div class="tool-option">
+                <input type="radio" name="tool" id="rectangle-tool" value="rectangle">
+                <label for="rectangle-tool">
+                  <i class="fas fa-square tool-icon"></i>
+                  <span class="tool-name">Retângulo</span>
+                </label>
+              </div>
+              <div class="tool-option">
+                <input type="radio" name="tool" id="ellipse-tool" value="ellipse">
+                <label for="ellipse-tool">
+                  <i class="fas fa-circle tool-icon"></i>
+                  <span class="tool-name">Elipse</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <h3>Configurações de Ferramenta</h3>
+            <div class="slider-container">
+              <label>
+                Tamanho do Pincel
+                <span id="brush-size-value">20</span>
+              </label>
+              <input type="range" id="brush-size" min="1" max="100" value="20">
+            </div>
+            <div class="slider-container">
+              <label>
+                Intensidade do Blur
+                <span id="blur-intensity-value">15</span>
+              </label>
+              <input type="range" id="blur-intensity" min="1" max="50" value="15">
+            </div>
+            <div class="slider-container">
+              <label>
+                Iterações do Blur
+                <span id="blur-iterations-value">5</span>
+              </label>
+              <input type="range" id="blur-iterations" min="1" max="10" value="5">
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <h3>Ações</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <button id="undo-btn" class="btn btn-secondary">
+                <i class="fas fa-undo"></i> Desfazer
+              </button>
+              <button id="redo-btn" class="btn btn-secondary">
+                <i class="fas fa-redo"></i> Refazer
+              </button>
+              <button id="clear-all-btn" class="btn btn-secondary">
+                <i class="fas fa-trash"></i> Limpar Tudo
+              </button>
+              <button id="detect-btn" class="btn btn-accent">
+                <i class="fas fa-search"></i> Detectar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="settings-tab" class="tab-content">
+          <div class="sidebar-section">
+            <h3>Salvamento Automático</h3>
+            <div class="auto-save-container">
+              <label class="switch">
+                <input type="checkbox" id="auto-save-toggle">
+                <span class="slider"></span>
+              </label>
+              <label for="auto-save-toggle">Ativar salvamento automático</label>
+            </div>
+            <div class="auto-save-interval">
+              <label for="auto-save-interval">Intervalo:</label>
+              <select id="auto-save-interval">
+                <option value="1">1 minuto</option>
+                <option value="5" selected>5 minutos</option>
+                <option value="10">10 minutos</option>
+                <option value="30">30 minutos</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <h3>Aparência</h3>
+            <div class="auto-save-container">
+              <label class="switch">
+                <input type="checkbox" id="dark-mode-toggle">
+                <span class="slider"></span>
+              </label>
+              <label for="dark-mode-toggle">Modo escuro</label>
+            </div>
+          </div>
+        </div>
+
+        <div id="help-tab" class="tab-content">
+          <div class="sidebar-section">
+            <h3>Como usar</h3>
+            <p>Use as ferramentas para selecionar áreas que deseja proteger com blur.</p>
+            <ul style="padding-left: 20px; margin-top: 10px;">
+              <li>Pincel: Desenhe livremente sobre áreas sensíveis</li>
+              <li>Retângulo: Crie retângulos para cobrir informações</li>
+              <li>Elipse: Crie elipses para cobrir informações</li>
+            </ul>
+          </div>
+          <div class="sidebar-section">
+            <h3>Dicas</h3>
+            <ul style="padding-left: 20px; margin-top: 10px;">
+              <li>Use o botão "Detectar" para identificar automaticamente informações sensíveis</li>
+              <li>Ajuste a intensidade do blur para melhor proteção</li>
+              <li>Use Ctrl+Clique ou botão direito para mover a imagem</li>
+              <li>Use a roda do mouse para zoom</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>LGPD Document Protector &copy; 2023 - Proteja seus documentos de acordo com a Lei Geral de Proteção de Dados</p>
+    </footer>
+  </div>
+
+  <div id="lgpd-modal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Sobre a LGPD</h2>
+      <p>A Lei Geral de Proteção de Dados (LGPD) estabelece regras sobre coleta, armazenamento, tratamento e compartilhamento de dados pessoais.</p>
+      <p>Este aplicativo ajuda a proteger informações sensíveis em documentos, aplicando efeitos de blur em áreas que contêm dados pessoais.</p>
+      <h3 style="margin-top: 15px;">Tipos de dados protegidos pela LGPD:</h3>
+      <ul style="padding-left: 20px; margin-top: 10px;">
+        <li>Nome completo</li>
+        <li>CPF, RG e outros documentos de identificação</li>
+        <li>Endereço residencial</li>
+        <li>Dados bancários</li>
+        <li>Informações médicas</li>
+        <li>E outros dados que possam identificar uma pessoa</li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="status-message"></div>
+
+  <input type="file" id="image-upload" accept="image/*" style="display: none;">
+  <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
+
+  <script src="image-processor.js"></script>
+  <script src="history-manager.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
