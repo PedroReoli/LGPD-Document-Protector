@@ -1,5 +1,5 @@
 /**
- * ImageProcessor class - Versão corrigida
+ * ImageProcessor class - Versão melhorada
  * Manipula o carregamento e processamento de imagens com efeitos de blur
  */
 class ImageProcessor {
@@ -11,9 +11,26 @@ class ImageProcessor {
     this.height = 0;
     this.ctx = null;
     this.tempCtx = null;
-    this.blurCache = null; // Cache para otimizar o processamento de blur
-    this.lastBlurIntensity = 0; // Armazena a última intensidade de blur usada
-    this.dirtyRegions = []; // Regiões que precisam ser atualizadas
+    this.blurCache = null;
+    this.lastBlurIntensity = 0;
+    this.lastBlurIterations = 0;
+    this.dirtyRegions = [];
+    this.highQuality = true;
+    this.pdfDocument = null;
+    this.currentPage = 0;
+    this.totalPages = 0;
+    this.isProcessing = false;
+  }
+
+  /**
+   * Define a qualidade do blur
+   */
+  setHighQuality(highQuality) {
+    this.highQuality = highQuality;
+    // Invalida o cache quando a qualidade muda
+    this.blurCache = null;
+    this.lastBlurIntensity = 0;
+    this.lastBlurIterations = 0;
   }
 
   /**
@@ -34,39 +51,64 @@ class ImageProcessor {
         return;
       }
 
+      this.isProcessing = true;
       const reader = new FileReader();
       
       reader.onload = (e) => {
         const img = new Image();
+        img.crossOrigin = "anonymous"; // Evita problemas de CORS
         
         img.onload = () => {
-          // Limita o tamanho da imagem para melhor desempenho
-          const maxDimension = 2500; // Limite razoável para desempenho
-          let finalWidth = img.width;
-          let finalHeight = img.height;
-          
-          if (img.width > maxDimension || img.height > maxDimension) {
-            if (img.width > img.height) {
-              finalWidth = maxDimension;
-              finalHeight = Math.round(img.height * (maxDimension / img.width));
+          try {
+            // Limita o tamanho da imagem para melhor desempenho
+            const maxDimension = 3000; // Limite razoável para desempenho
+            let finalWidth = img.width;
+            let finalHeight = img.height;
+            
+            if (img.width > maxDimension || img.height > maxDimension) {
+              if (img.width > img.height) {
+                finalWidth = maxDimension;
+                finalHeight = Math.round(img.height * (maxDimension / img.width));
+              } else {
+                finalHeight = maxDimension;
+                finalWidth = Math.round(img.width * (maxDimension / img.height));
+              }
+              
+              // Redimensiona a imagem
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = finalWidth;
+              tempCanvas.height = finalHeight;
+              const tempCtx = tempCanvas.getContext('2d');
+              tempCtx.drawImage(img, 0, 0, finalWidth, finalHeight);
+              
+              // Cria uma nova imagem a partir do canvas redimensionado
+              const resizedImg = new Image();
+              resizedImg.crossOrigin = "anonymous";
+              resizedImg.onload = () => {
+                this.originalImage = resizedImg;
+                this.width = finalWidth;
+                this.height = finalHeight;
+                
+                // Cria as máscaras vazias
+                this.createMasks();
+                
+                // Limpa o cache de blur
+                this.blurCache = null;
+                this.lastBlurIntensity = 0;
+                this.lastBlurIterations = 0;
+                
+                this.isProcessing = false;
+                resolve(resizedImg);
+              };
+              resizedImg.onerror = () => {
+                this.isProcessing = false;
+                reject(new Error("Falha ao redimensionar imagem"));
+              };
+              resizedImg.src = tempCanvas.toDataURL('image/png');
             } else {
-              finalHeight = maxDimension;
-              finalWidth = Math.round(img.width * (maxDimension / img.height));
-            }
-            
-            // Redimensiona a imagem
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = finalWidth;
-            tempCanvas.height = finalHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0, finalWidth, finalHeight);
-            
-            // Cria uma nova imagem a partir do canvas redimensionado
-            const resizedImg = new Image();
-            resizedImg.onload = () => {
-              this.originalImage = resizedImg;
-              this.width = finalWidth;
-              this.height = finalHeight;
+              this.originalImage = img;
+              this.width = img.width;
+              this.height = img.height;
               
               // Cria as máscaras vazias
               this.createMasks();
@@ -74,14 +116,148 @@ class ImageProcessor {
               // Limpa o cache de blur
               this.blurCache = null;
               this.lastBlurIntensity = 0;
+              this.lastBlurIterations = 0;
               
-              resolve(resizedImg);
-            };
-            resizedImg.onerror = () => {
-              reject(new Error("Falha ao redimensionar imagem"));
-            };
-            resizedImg.src = tempCanvas.toDataURL('image/png');
-          } else {
+              this.isProcessing = false;
+              resolve(img);
+            }
+          } catch (error) {
+            this.isProcessing = false;
+            reject(new Error(`Erro ao processar imagem: ${error.message}`));
+          }
+        };
+        
+        img.onerror = () => {
+          this.isProcessing = false;
+          reject(new Error("Falha ao carregar imagem. O arquivo pode estar corrompido."));
+        };
+        
+        img.src = e.target.result;
+      };
+      
+      reader.onerror = () => {
+        this.isProcessing = false;
+        reject(new Error("Falha ao ler arquivo. Verifique se o arquivo é válido."));
+      };
+      
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Carrega um PDF a partir de um objeto File
+   * Nota: Esta é uma implementação simulada. Em um ambiente real,
+   * você usaria uma biblioteca como PDF.js para processar PDFs.
+   */
+  loadPDF(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !(file instanceof Blob)) {
+        reject(new Error("Arquivo PDF inválido"));
+        return;
+      }
+
+      if (file.type !== 'application/pdf') {
+        reject(new Error("O arquivo não é um PDF válido"));
+        return;
+      }
+
+      this.isProcessing = true;
+
+      // Simulação de carregamento de PDF
+      setTimeout(() => {
+        try {
+          // Em uma implementação real, usaríamos PDF.js para carregar o documento
+          this.pdfDocument = {
+            numPages: 3 // Simulando 3 páginas
+          };
+          
+          this.totalPages = this.pdfDocument.numPages;
+          this.currentPage = 1;
+          
+          // Carrega a primeira página
+          this.loadPDFPage(1)
+            .then(resolve)
+            .catch(reject);
+        } catch (error) {
+          this.isProcessing = false;
+          reject(new Error(`Erro ao processar PDF: ${error.message}`));
+        }
+      }, 1000);
+    });
+  }
+
+  /**
+   * Carrega uma página específica do PDF
+   */
+  loadPDFPage(pageNumber) {
+    return new Promise((resolve, reject) => {
+      if (!this.pdfDocument) {
+        reject(new Error("Nenhum documento PDF carregado"));
+        return;
+      }
+
+      if (pageNumber < 1 || pageNumber > this.totalPages) {
+        reject(new Error(`Página inválida: ${pageNumber}. O documento tem ${this.totalPages} páginas.`));
+        return;
+      }
+
+      this.isProcessing = true;
+      this.currentPage = pageNumber;
+
+      // Simulação de renderização de página de PDF
+      setTimeout(() => {
+        try {
+          // Cria uma imagem placeholder para a página do PDF
+          const canvas = document.createElement('canvas');
+          canvas.width = 800;
+          canvas.height = 1100;
+          const ctx = canvas.getContext('2d');
+          
+          // Desenha um fundo
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          // Desenha uma borda
+          ctx.strokeStyle = '#cccccc';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+          
+          // Adiciona texto
+          ctx.fillStyle = '#333333';
+          ctx.font = '30px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`Página ${pageNumber} do PDF`, canvas.width / 2, 100);
+          
+          // Adiciona alguns elementos para simular conteúdo
+          ctx.font = '16px Arial';
+          ctx.textAlign = 'left';
+          
+          // Cabeçalho
+          ctx.fillStyle = '#666666';
+          ctx.fillText('DOCUMENTO CONFIDENCIAL', 50, 150);
+          
+          // Dados pessoais (que seriam detectados para blur)
+          ctx.fillStyle = '#333333';
+          ctx.fillText('Nome: João da Silva', 50, 200);
+          ctx.fillText('CPF: 123.456.789-00', 50, 230);
+          ctx.fillText('Endereço: Rua das Flores, 123', 50, 260);
+          ctx.fillText('Telefone: (11) 98765-4321', 50, 290);
+          
+          // Mais conteúdo
+          for (let i = 0; i < 10; i++) {
+            ctx.fillText(`Linha de conteúdo ${i + 1} - Informações do documento`, 50, 350 + i * 30);
+          }
+          
+          // Rodapé
+          ctx.fillStyle = '#666666';
+          ctx.textAlign = 'center';
+          ctx.fillText(`Página ${pageNumber} de ${this.totalPages}`, canvas.width / 2, canvas.height - 50);
+          
+          // Converte o canvas para uma imagem
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          
+          img.onload = () => {
             this.originalImage = img;
             this.width = img.width;
             this.height = img.height;
@@ -92,23 +268,27 @@ class ImageProcessor {
             // Limpa o cache de blur
             this.blurCache = null;
             this.lastBlurIntensity = 0;
+            this.lastBlurIterations = 0;
             
-            resolve(img);
-          }
-        };
-        
-        img.onerror = () => {
-          reject(new Error("Falha ao carregar imagem. O arquivo pode estar corrompido."));
-        };
-        
-        img.src = e.target.result;
-      };
-      
-      reader.onerror = () => {
-        reject(new Error("Falha ao ler arquivo. Verifique se o arquivo é válido."));
-      };
-      
-      reader.readAsDataURL(file);
+            this.isProcessing = false;
+            resolve({
+              pageNumber: pageNumber,
+              totalPages: this.totalPages,
+              image: img
+            });
+          };
+          
+          img.onerror = () => {
+            this.isProcessing = false;
+            reject(new Error("Falha ao renderizar página do PDF"));
+          };
+          
+          img.src = canvas.toDataURL('image/png');
+        } catch (error) {
+          this.isProcessing = false;
+          reject(new Error(`Erro ao renderizar página do PDF: ${error.message}`));
+        }
+      }, 500);
     });
   }
 
@@ -128,9 +308,14 @@ class ImageProcessor {
     this.tempMaskCanvas.height = this.height;
     this.tempCtx = this.tempMaskCanvas.getContext("2d", { willReadFrequently: true });
     
-    // Limpa as máscaras
+    // Limpa as máscaras - certifica-se que estão completamente transparentes
     this.ctx.clearRect(0, 0, this.width, this.height);
     this.tempCtx.clearRect(0, 0, this.width, this.height);
+    
+    // Reseta o cache de blur
+    this.blurCache = null;
+    this.lastBlurIntensity = 0;
+    this.lastBlurIterations = 0;
     
     // Reseta as regiões sujas
     this.dirtyRegions = [];
@@ -361,7 +546,15 @@ class ImageProcessor {
       
       // Invalida o cache de blur
       this.blurCache = null;
+      
+      // Força a atualização do cache de blur na próxima renderização
+      this.lastBlurIntensity = -1;
+      this.lastBlurIterations = -1;
+      
+      return true;
     }
+    
+    return false;
   }
 
   /**
@@ -377,8 +570,11 @@ class ImageProcessor {
     let maxY = 0;
     let hasVisiblePixels = false;
     
-    for (let y = 0; y < canvas.height; y++) {
-      for (let x = 0; x < canvas.width; x++) {
+    // Otimização: verifica apenas a cada 4 pixels para melhor desempenho
+    const step = 4;
+    
+    for (let y = 0; y < canvas.height; y += step) {
+      for (let x = 0; x < canvas.width; x += step) {
         const alpha = data[(y * canvas.width + x) * 4 + 3];
         if (alpha > 0) {
           minX = Math.min(minX, x);
@@ -392,11 +588,12 @@ class ImageProcessor {
     
     if (!hasVisiblePixels) return null;
     
+    // Adiciona uma margem para compensar o passo
     return {
-      x: minX,
-      y: minY,
-      width: maxX - minX + 1,
-      height: maxY - minY + 1
+      x: Math.max(0, minX - step),
+      y: Math.max(0, minY - step),
+      width: Math.min(canvas.width - minX, maxX - minX + step * 2),
+      height: Math.min(canvas.height - minY, maxY - minY + step * 2)
     };
   }
 
@@ -423,15 +620,31 @@ class ImageProcessor {
     ctx.scale(scaleFactor, scaleFactor);
     ctx.drawImage(this.originalImage, 0, 0);
     
-    // Aplica o efeito de blur - CORRIGIDO: agora aplica blur apenas nas áreas mascaradas
+    // Verifica se há algo na máscara
+    let hasMask = false;
     if (this.maskCanvas) {
+      const maskData = this.ctx.getImageData(0, 0, this.width, this.height);
+      for (let i = 3; i < maskData.data.length; i += 4) {
+        if (maskData.data[i] > 0) {
+          hasMask = true;
+          break;
+        }
+      }
+    }
+    
+    // Aplica o efeito de blur apenas se houver máscara
+    if (this.maskCanvas && hasMask) {
       // Verifica se precisamos atualizar o cache de blur
-      if (!this.blurCache || this.lastBlurIntensity !== intensity) {
-        this.updateBlurCache(intensity);
+      if (!this.blurCache || 
+          this.lastBlurIntensity !== intensity || 
+          this.lastBlurIterations !== iterations) {
+        this.updateBlurCache(intensity, iterations);
       }
       
       // Desenha a imagem borrada nas áreas mascaradas
-      ctx.drawImage(this.blurCache, 0, 0);
+      if (this.blurCache) {
+        ctx.drawImage(this.blurCache, 0, 0);
+      }
     }
     
     // Desenha a máscara temporária com cor vermelha semi-transparente
@@ -464,7 +677,7 @@ class ImageProcessor {
   /**
    * Atualiza o cache de blur
    */
-  updateBlurCache(intensity) {
+  updateBlurCache(intensity, iterations) {
     if (!this.originalImage || !this.maskCanvas) return;
     
     // Cria um canvas para o cache de blur
@@ -482,6 +695,21 @@ class ImageProcessor {
     // Desenha a imagem original
     blurCtx.drawImage(this.originalImage, 0, 0);
     
+    // Verifica se há algo na máscara
+    const maskData = this.ctx.getImageData(0, 0, this.width, this.height);
+    let hasMask = false;
+    for (let i = 3; i < maskData.data.length; i += 4) {
+      if (maskData.data[i] > 0) {
+        hasMask = true;
+        break;
+      }
+    }
+    
+    // Se não houver máscara, não aplica blur
+    if (!hasMask) {
+      return;
+    }
+    
     // Cria um canvas temporário para aplicar o blur
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = this.width;
@@ -491,23 +719,45 @@ class ImageProcessor {
     // Desenha a imagem original no canvas temporário
     tempCtx.drawImage(this.originalImage, 0, 0);
     
-    // Aplica o filtro de blur
-    tempCtx.filter = `blur(${intensity}px)`;
-    tempCtx.drawImage(tempCanvas, 0, 0);
+    // Aplica o filtro de blur com qualidade baseada na configuração
+    if (this.highQuality) {
+      // Alta qualidade: aplica múltiplas iterações de blur
+      for (let i = 0; i < iterations; i++) {
+        tempCtx.filter = `blur(${intensity / iterations}px)`;
+        tempCtx.drawImage(tempCanvas, 0, 0);
+      }
+    } else {
+      // Baixa qualidade: aplica uma única iteração de blur
+      tempCtx.filter = `blur(${intensity}px)`;
+      tempCtx.drawImage(this.originalImage, 0, 0);
+    }
     
-    // Desenha a máscara no canvas de blur
+    // Desenha a imagem borrada apenas nas áreas mascaradas
+    blurCtx.globalCompositeOperation = "source-over";
+    
+    // Primeiro, desenha a máscara no canvas de blur
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = this.width;
+    maskCanvas.height = this.height;
+    const maskCtx = maskCanvas.getContext("2d");
+    
+    // Desenha a máscara em branco
+    maskCtx.fillStyle = "white";
+    maskCtx.drawImage(this.maskCanvas, 0, 0);
+    
+    // Usa a máscara como recorte para a imagem borrada
+    blurCtx.save();
     blurCtx.globalCompositeOperation = "destination-in";
     blurCtx.drawImage(this.maskCanvas, 0, 0);
+    blurCtx.restore();
     
-    // Desenha a imagem borrada nas áreas mascaradas
+    // Agora desenha a imagem borrada apenas nas áreas mascaradas
     blurCtx.globalCompositeOperation = "source-over";
-    blurCtx.drawImage(tempCanvas, 0, 0, this.width, this.height, 0, 0, this.width, this.height);
+    blurCtx.drawImage(tempCanvas, 0, 0);
     
-    // Restaura o modo de composição
-    blurCtx.globalCompositeOperation = "source-over";
-    
-    // Atualiza a última intensidade de blur usada
+    // Atualiza a última intensidade e iterações de blur usadas
     this.lastBlurIntensity = intensity;
+    this.lastBlurIterations = iterations;
   }
 
   /**
@@ -520,6 +770,8 @@ class ImageProcessor {
     this.clearTempMask();
     this.blurCache = null;
     this.dirtyRegions = [];
+    this.lastBlurIntensity = 0;
+    this.lastBlurIterations = 0;
   }
 
   /**
@@ -575,32 +827,64 @@ class ImageProcessor {
   }
 
   /**
-   * Simula a detecção de informações sensíveis
+   * Detecta informações sensíveis usando OCR simulado
    */
-  simulateDetectSensitiveInfo() {
+  detectSensitiveInfo() {
     if (!this.originalImage) return [];
     
-    // Simula a detecção com regiões aleatórias
-    const regions = [];
-    const numRegions = Math.floor(Math.random() * 3) + 1; // 1-3 regiões para melhor desempenho
-    
-    for (let i = 0; i < numRegions; i++) {
-      const x = Math.floor(Math.random() * (this.width - 100));
-      const y = Math.floor(Math.random() * (this.height - 30));
-      const width = Math.floor(Math.random() * 100) + 50;
-      const height = Math.floor(Math.random() * 20) + 10;
-      
-      regions.push({ x, y, width, height });
-    }
-    
-    return regions;
+    return new Promise((resolve, reject) => {
+      try {
+        // Em uma implementação real, usaríamos OCR para detectar informações sensíveis
+        // Para esta demonstração, vamos simular com regiões baseadas em padrões comuns
+        
+        this.isProcessing = true;
+        
+        // Simula um tempo de processamento
+        setTimeout(() => {
+          try {
+            const regions = [];
+            
+            // Simula a detecção de CPF, telefone, etc. em posições específicas
+            // Em um PDF simulado
+            if (this.pdfDocument) {
+              // Dados pessoais no PDF simulado
+              regions.push({ x: 50, y: 185, width: 200, height: 25 }); // Nome
+              regions.push({ x: 50, y: 215, width: 150, height: 25 }); // CPF
+              regions.push({ x: 50, y: 245, width: 250, height: 25 }); // Endereço
+              regions.push({ x: 50, y: 275, width: 180, height: 25 }); // Telefone
+            } else {
+              // Para imagens normais, cria regiões aleatórias
+              const numRegions = Math.floor(Math.random() * 3) + 2; // 2-4 regiões
+              
+              for (let i = 0; i < numRegions; i++) {
+                const x = Math.floor(Math.random() * (this.width - 150));
+                const y = Math.floor(Math.random() * (this.height - 40));
+                const width = Math.floor(Math.random() * 100) + 50;
+                const height = Math.floor(Math.random() * 20) + 20;
+                
+                regions.push({ x, y, width, height });
+              }
+            }
+            
+            this.isProcessing = false;
+            resolve(regions);
+          } catch (error) {
+            this.isProcessing = false;
+            reject(new Error(`Erro na detecção de informações sensíveis: ${error.message}`));
+          }
+        }, 1500);
+      } catch (error) {
+        this.isProcessing = false;
+        reject(new Error(`Erro ao iniciar detecção: ${error.message}`));
+      }
+    });
   }
 
   /**
    * Aplica blur em regiões sensíveis
    */
   applyBlurToSensitiveRegions(regions) {
-    if (!this.maskCanvas) return;
+    if (!this.maskCanvas) return false;
     
     // Adiciona cada região à máscara
     regions.forEach(region => {
@@ -614,12 +898,16 @@ class ImageProcessor {
     
     // Invalida o cache de blur
     this.blurCache = null;
+    this.lastBlurIntensity = -1;
+    this.lastBlurIterations = -1;
+    
+    return true;
   }
 
   /**
    * Salva a imagem atual com blur aplicado
    */
-  saveImage(intensity) {
+  saveImage(intensity, iterations) {
     if (!this.originalImage) return null;
     
     // Cria um canvas para salvar a imagem
@@ -633,29 +921,50 @@ class ImageProcessor {
     
     // Aplica o efeito de blur nas áreas mascaradas
     if (this.maskCanvas) {
-      // Cria um canvas temporário para a imagem borrada
-      const blurCanvas = document.createElement("canvas");
-      blurCanvas.width = this.width;
-      blurCanvas.height = this.height;
-      const blurCtx = blurCanvas.getContext("2d");
+      // Verifica se há algo na máscara
+      const maskData = this.ctx.getImageData(0, 0, this.width, this.height);
+      let hasMask = false;
+      for (let i = 3; i < maskData.data.length; i += 4) {
+        if (maskData.data[i] > 0) {
+          hasMask = true;
+          break;
+        }
+      }
       
-      // Desenha a imagem original no canvas de blur
-      blurCtx.drawImage(this.originalImage, 0, 0);
-      
-      // Aplica o filtro de blur
-      blurCtx.filter = `blur(${intensity}px)`;
-      blurCtx.drawImage(blurCanvas, 0, 0);
-      
-      // Desenha a máscara
-      blurCtx.globalCompositeOperation = "source-in";
-      blurCtx.drawImage(this.maskCanvas, 0, 0);
-      
-      // Reseta o filtro e o modo de composição
-      blurCtx.filter = "none";
-      blurCtx.globalCompositeOperation = "source-over";
-      
-      // Desenha a imagem borrada sobre a original
-      ctx.drawImage(blurCanvas, 0, 0);
+      if (hasMask) {
+        // Cria um canvas temporário para a imagem borrada
+        const blurCanvas = document.createElement("canvas");
+        blurCanvas.width = this.width;
+        blurCanvas.height = this.height;
+        const blurCtx = blurCanvas.getContext("2d");
+        
+        // Desenha a imagem original no canvas de blur
+        blurCtx.drawImage(this.originalImage, 0, 0);
+        
+        // Aplica o filtro de blur com qualidade baseada na configuração
+        if (this.highQuality && iterations > 1) {
+          // Alta qualidade: aplica múltiplas iterações de blur
+          for (let i = 0; i < iterations; i++) {
+            blurCtx.filter = `blur(${intensity / iterations}px)`;
+            blurCtx.drawImage(blurCanvas, 0, 0);
+          }
+        } else {
+          // Baixa qualidade: aplica uma única iteração de blur
+          blurCtx.filter = `blur(${intensity}px)`;
+          blurCtx.drawImage(blurCanvas, 0, 0);
+        }
+        
+        // Desenha a máscara
+        blurCtx.globalCompositeOperation = "source-in";
+        blurCtx.drawImage(this.maskCanvas, 0, 0);
+        
+        // Reseta o filtro e o modo de composição
+        blurCtx.filter = "none";
+        blurCtx.globalCompositeOperation = "source-over";
+        
+        // Desenha a imagem borrada sobre a original
+        ctx.drawImage(blurCanvas, 0, 0);
+      }
     }
     
     try {
@@ -665,5 +974,287 @@ class ImageProcessor {
       console.error("Erro ao salvar imagem:", error);
       return null;
     }
+  }
+
+  /**
+   * Método de depuração para visualizar a máscara
+   */
+  debugShowMask(ctx) {
+    if (!this.maskCanvas) return;
+    
+    const canvas = ctx.canvas;
+    
+    // Limpa o canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Calcula a posição para centralizar a imagem
+    const scaledWidth = this.width;
+    const scaledHeight = this.height;
+    const posX = Math.max(0, (canvas.width - scaledWidth) / 2);
+    const posY = Math.max(0, (canvas.height - scaledHeight) / 2);
+    
+    // Desenha a máscara em vermelho
+    ctx.save();
+    ctx.translate(posX, posY);
+    ctx.fillStyle = "red";
+    ctx.drawImage(this.maskCanvas, 0, 0);
+    
+    // Adiciona texto de depuração
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("Visualização da Máscara (Depuração)", 10, 20);
+    ctx.restore();
+  }
+}
+
+```js project="LGPD Document Protector" file="history-manager.js" type="code"
+/**
+ * HistoryManager class - Versão melhorada
+ * Gerencia o histórico de edições para operações de desfazer/refazer
+ */
+class HistoryManager {
+  constructor(maxHistory = 20) {
+    this.history = [];
+    this.thumbnails = [];
+    this.position = -1;
+    this.maxHistory = maxHistory;
+  }
+
+  /**
+   * Adiciona um novo estado ao histórico
+   */
+  add(maskCanvas, thumbnail) {
+    try {
+      // Se não estivermos no final do histórico, trunca-o
+      if (this.position &lt; this.history.length - 1) {
+        this.history = this.history.slice(0, this.position + 1);
+        this.thumbnails = this.thumbnails.slice(0, this.position + 1);
+      }
+      
+      // Clona a máscara de forma eficiente
+      const clonedCanvas = this.cloneMaskCanvas(maskCanvas);
+      
+      // Adiciona o novo estado
+      this.history.push(clonedCanvas);
+      this.thumbnails.push(thumbnail);
+      
+      // Limita o tamanho do histórico
+      if (this.history.length > this.maxHistory) {
+        // Remove o estado mais antigo
+        this.history.shift();
+        this.thumbnails.shift();
+      }
+      
+      this.position = this.history.length - 1;
+    } catch (error) {
+      console.error("Erro ao adicionar ao histórico:", error);
+    }
+  }
+
+  /**
+   * Clona um canvas de máscara de forma eficiente
+   */
+  cloneMaskCanvas(maskCanvas) {
+    if (!maskCanvas) return null;
+    
+    try {
+      // Cria um novo canvas com as mesmas dimensões
+      const clonedCanvas = document.createElement("canvas");
+      clonedCanvas.width = maskCanvas.width;
+      clonedCanvas.height = maskCanvas.height;
+      
+      // Obtém o contexto e desenha a máscara original
+      const ctx = clonedCanvas.getContext("2d");
+      ctx.drawImage(maskCanvas, 0, 0);
+      
+      return clonedCanvas;
+    } catch (error) {
+      console.error("Erro ao clonar máscara:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Verifica se podemos desfazer
+   */
+  canUndo() {
+    return this.position > 0;
+  }
+
+  /**
+   * Verifica se podemos refazer
+   */
+  canRedo() {
+    return this.position &lt; this.history.length - 1;
+  }
+
+  /**
+   * Desfaz a última ação
+   */
+  undo() {
+    if (!this.canUndo()) {
+      return null;
+    }
+    
+    this.position--;
+    return this.history[this.position];
+  }
+
+  /**
+   * Refaz a última ação desfeita
+   */
+  redo() {
+    if (!this.canRedo()) {
+      return null;
+    }
+    
+    this.position++;
+    return this.history[this.position];
+  }
+
+  /**
+   * Vai para um estado específico
+   */
+  goToState(index) {
+    if (index &lt; 0 || index >= this.history.length) {
+      return null;
+    }
+    
+    this.position = index;
+    return this.history[this.position];
+  }
+
+  /**
+   * Reseta o histórico
+   */
+  reset() {
+    this.history = [];
+    this.thumbnails = [];
+    this.position = -1;
+  }
+
+  /**
+   * Desenha as miniaturas do histórico em um canvas
+   */
+  drawThumbnails(ctx, darkMode) {
+    if (!ctx || !ctx.canvas) return;
+    
+    try {
+      const canvas = ctx.canvas;
+      
+      // Limpa o canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Desenha o fundo
+      ctx.fillStyle = darkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.5)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Se não houver histórico, mostra uma mensagem
+      if (this.thumbnails.length === 0) {
+        ctx.fillStyle = darkMode ? '#bbbbbb' : '#666666';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Sem histórico disponível', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+      
+      // Calcula o tamanho e a posição das miniaturas
+      const thumbWidth = 60;
+      const thumbHeight = 45;
+      const spacing = 10;
+      const maxVisible = Math.floor((canvas.width - spacing) / (thumbWidth + spacing));
+      
+      // Determina quais miniaturas mostrar
+      let startIndex = 0;
+      if (this.thumbnails.length > maxVisible) {
+        // Centraliza a posição atual
+        startIndex = Math.max(0, this.position - Math.floor(maxVisible / 2));
+        startIndex = Math.min(startIndex, this.thumbnails.length - maxVisible);
+      }
+      
+      // Desenha as miniaturas visíveis
+      const endIndex = Math.min(startIndex + maxVisible, this.thumbnails.length);
+      
+      for (let i = startIndex; i &lt; endIndex; i++) {
+        const x = (i - startIndex) * (thumbWidth + spacing) + spacing;
+        const y = 10;
+        
+        // Desenha um retângulo ao redor da posição atual
+        if (i === this.position) {
+          ctx.strokeStyle = "#ff0000";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x - 2, y - 2, thumbWidth + 4, thumbHeight + 4);
+        }
+        
+        // Desenha a miniatura
+        ctx.drawImage(this.thumbnails[i], x, y, thumbWidth, thumbHeight);
+        
+        // Desenha o índice
+        ctx.fillStyle = darkMode ? "#ffffff" : "#333333";
+        ctx.font = "12px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`${i + 1}`, x + thumbWidth / 2, y + thumbHeight + 15);
+      }
+      
+      // Se houver mais miniaturas do que podemos mostrar, adiciona indicadores
+      if (startIndex > 0) {
+        ctx.fillStyle = darkMode ? "#ffffff" : "#333333";
+        ctx.beginPath();
+        ctx.moveTo(5, canvas.height / 2 - 10);
+        ctx.lineTo(15, canvas.height / 2);
+        ctx.lineTo(5, canvas.height / 2 + 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+      
+      if (endIndex &lt; this.thumbnails.length) {
+        ctx.fillStyle = darkMode ? "#ffffff" : "#333333";
+        ctx.beginPath();
+        ctx.moveTo(canvas.width - 5, canvas.height / 2 - 10);
+        ctx.lineTo(canvas.width - 15, canvas.height / 2);
+        ctx.lineTo(canvas.width - 5, canvas.height / 2 + 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } catch (error) {
+      console.error("Erro ao desenhar miniaturas:", error);
+    }
+  }
+
+  /**
+   * Obtém o índice de uma miniatura em uma posição específica
+   */
+  getThumbnailAtPosition(x, y) {
+    if (this.thumbnails.length === 0) {
+      return -1;
+    }
+    
+    const thumbWidth = 60;
+    const thumbHeight = 45;
+    const spacing = 10;
+    const maxVisible = Math.floor((y &lt; 10 || y > 10 + thumbHeight + 15) ? -1 : (document.getElementById('history-canvas').width - spacing) / (thumbWidth + spacing));
+    
+    // Determina quais miniaturas estão visíveis
+    let startIndex = 0;
+    if (this.thumbnails.length > maxVisible) {
+      startIndex = Math.max(0, this.position - Math.floor(maxVisible / 2));
+      startIndex = Math.min(startIndex, this.thumbnails.length - maxVisible);
+    }
+    
+    // Verifica se a posição está dentro da área da miniatura
+    if (y &lt; 10 || y > 10 + thumbHeight) {
+      return -1;
+    }
+    
+    // Calcula o índice
+    const visibleIndex = Math.floor((x - spacing) / (thumbWidth + spacing));
+    const index = startIndex + visibleIndex;
+    
+    // Verifica se o índice é válido
+    if (visibleIndex &lt; 0 || index >= this.thumbnails.length) {
+      return -1;
+    }
+    
+    return index;
   }
 }

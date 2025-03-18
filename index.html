@@ -76,11 +76,6 @@
         </div>
       </div>
 
-      <div class="history-container">
-        <h3>Histórico</h3>
-        <canvas id="history-canvas"></canvas>
-      </div>
-
       <div class="sidebar">
         <div id="edit-tab" class="tab-content active">
           <div class="sidebar-section">
@@ -137,7 +132,7 @@
 
           <div class="sidebar-section">
             <h3>Ações</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="action-buttons">
               <button id="undo-btn" class="btn btn-secondary">
                 <i class="fas fa-undo"></i> Desfazer
               </button>
@@ -185,13 +180,24 @@
               <label for="dark-mode-toggle">Modo escuro</label>
             </div>
           </div>
+          
+          <div class="sidebar-section">
+            <h3>Desempenho</h3>
+            <div class="auto-save-container">
+              <label class="switch">
+                <input type="checkbox" id="high-quality-toggle" checked>
+                <span class="slider"></span>
+              </label>
+              <label for="high-quality-toggle">Alta qualidade de blur</label>
+            </div>
+          </div>
         </div>
 
         <div id="help-tab" class="tab-content">
           <div class="sidebar-section">
             <h3>Como usar</h3>
             <p>Use as ferramentas para selecionar áreas que deseja proteger com blur.</p>
-            <ul style="padding-left: 20px; margin-top: 10px;">
+            <ul>
               <li>Pincel: Desenhe livremente sobre áreas sensíveis</li>
               <li>Retângulo: Crie retângulos para cobrir informações</li>
               <li>Elipse: Crie elipses para cobrir informações</li>
@@ -199,14 +205,31 @@
           </div>
           <div class="sidebar-section">
             <h3>Dicas</h3>
-            <ul style="padding-left: 20px; margin-top: 10px;">
+            <ul>
               <li>Use o botão "Detectar" para identificar automaticamente informações sensíveis</li>
               <li>Ajuste a intensidade do blur para melhor proteção</li>
               <li>Use Ctrl+Clique ou botão direito para mover a imagem</li>
               <li>Use a roda do mouse para zoom</li>
             </ul>
           </div>
+          <div class="sidebar-section">
+            <h3>Atalhos de Teclado</h3>
+            <ul class="shortcuts-list">
+              <li><span class="shortcut-key">Ctrl+Z</span> Desfazer</li>
+              <li><span class="shortcut-key">Ctrl+Y</span> Refazer</li>
+              <li><span class="shortcut-key">Ctrl+S</span> Salvar</li>
+              <li><span class="shortcut-key">+/-</span> Zoom</li>
+              <li><span class="shortcut-key">B</span> Ferramenta Pincel</li>
+              <li><span class="shortcut-key">R</span> Ferramenta Retângulo</li>
+              <li><span class="shortcut-key">E</span> Ferramenta Elipse</li>
+            </ul>
+          </div>
         </div>
+      </div>
+      
+      <div class="history-container">
+        <h3>Histórico</h3>
+        <canvas id="history-canvas"></canvas>
       </div>
     </div>
 
@@ -221,8 +244,8 @@
       <h2>Sobre a LGPD</h2>
       <p>A Lei Geral de Proteção de Dados (LGPD) estabelece regras sobre coleta, armazenamento, tratamento e compartilhamento de dados pessoais.</p>
       <p>Este aplicativo ajuda a proteger informações sensíveis em documentos, aplicando efeitos de blur em áreas que contêm dados pessoais.</p>
-      <h3 style="margin-top: 15px;">Tipos de dados protegidos pela LGPD:</h3>
-      <ul style="padding-left: 20px; margin-top: 10px;">
+      <h3>Tipos de dados protegidos pela LGPD:</h3>
+      <ul>
         <li>Nome completo</li>
         <li>CPF, RG e outros documentos de identificação</li>
         <li>Endereço residencial</li>
@@ -230,7 +253,19 @@
         <li>Informações médicas</li>
         <li>E outros dados que possam identificar uma pessoa</li>
       </ul>
+      <h3>Como usar este aplicativo:</h3>
+      <ol>
+        <li>Carregue um documento (imagem ou PDF)</li>
+        <li>Use as ferramentas para selecionar áreas com informações sensíveis</li>
+        <li>Ajuste a intensidade do blur conforme necessário</li>
+        <li>Salve o documento protegido</li>
+      </ol>
     </div>
+  </div>
+
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loading-message">Carregando...</p>
   </div>
 
   <div id="status-message"></div>
@@ -238,7 +273,6 @@
   <input type="file" id="image-upload" accept="image/*" style="display: none;">
   <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
 
-  <!-- Carregando os scripts na ordem correta -->
   <script src="image-processor.js"></script>
   <script src="history-manager.js"></script>
   <script src="main.js"></script>

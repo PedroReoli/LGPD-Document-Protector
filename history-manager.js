@@ -1,9 +1,9 @@
 /**
- * HistoryManager class - Versão otimizada
+ * HistoryManager class - Versão melhorada
  * Gerencia o histórico de edições para operações de desfazer/refazer
  */
 class HistoryManager {
-  constructor(maxHistory = 10) {
+  constructor(maxHistory = 20) {
     this.history = [];
     this.thumbnails = [];
     this.position = -1;
@@ -135,14 +135,38 @@ class HistoryManager {
       // Limpa o canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
+      // Desenha o fundo
+      ctx.fillStyle = darkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.5)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Se não houver histórico, mostra uma mensagem
+      if (this.thumbnails.length === 0) {
+        ctx.fillStyle = darkMode ? '#bbbbbb' : '#666666';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Sem histórico disponível', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+      
       // Calcula o tamanho e a posição das miniaturas
       const thumbWidth = 60;
       const thumbHeight = 45;
       const spacing = 10;
+      const maxVisible = Math.floor((canvas.width - spacing) / (thumbWidth + spacing));
       
-      // Desenha as miniaturas
-      this.thumbnails.forEach((thumbnail, i) => {
-        const x = i * (thumbWidth + spacing) + spacing;
+      // Determina quais miniaturas mostrar
+      let startIndex = 0;
+      if (this.thumbnails.length > maxVisible) {
+        // Centraliza a posição atual
+        startIndex = Math.max(0, this.position - Math.floor(maxVisible / 2));
+        startIndex = Math.min(startIndex, this.thumbnails.length - maxVisible);
+      }
+      
+      // Desenha as miniaturas visíveis
+      const endIndex = Math.min(startIndex + maxVisible, this.thumbnails.length);
+      
+      for (let i = startIndex; i < endIndex; i++) {
+        const x = (i - startIndex) * (thumbWidth + spacing) + spacing;
         const y = 10;
         
         // Desenha um retângulo ao redor da posição atual
@@ -153,14 +177,35 @@ class HistoryManager {
         }
         
         // Desenha a miniatura
-        ctx.drawImage(thumbnail, x, y, thumbWidth, thumbHeight);
+        ctx.drawImage(this.thumbnails[i], x, y, thumbWidth, thumbHeight);
         
         // Desenha o índice
         ctx.fillStyle = darkMode ? "#ffffff" : "#333333";
         ctx.font = "12px Arial";
         ctx.textAlign = "center";
         ctx.fillText(`${i + 1}`, x + thumbWidth / 2, y + thumbHeight + 15);
-      });
+      }
+      
+      // Se houver mais miniaturas do que podemos mostrar, adiciona indicadores
+      if (startIndex > 0) {
+        ctx.fillStyle = darkMode ? "#ffffff" : "#333333";
+        ctx.beginPath();
+        ctx.moveTo(5, canvas.height / 2 - 10);
+        ctx.lineTo(15, canvas.height / 2);
+        ctx.lineTo(5, canvas.height / 2 + 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+      
+      if (endIndex < this.thumbnails.length) {
+        ctx.fillStyle = darkMode ? "#ffffff" : "#333333";
+        ctx.beginPath();
+        ctx.moveTo(canvas.width - 5, canvas.height / 2 - 10);
+        ctx.lineTo(canvas.width - 15, canvas.height / 2);
+        ctx.lineTo(canvas.width - 5, canvas.height / 2 + 10);
+        ctx.closePath();
+        ctx.fill();
+      }
     } catch (error) {
       console.error("Erro ao desenhar miniaturas:", error);
     }
@@ -170,9 +215,21 @@ class HistoryManager {
    * Obtém o índice de uma miniatura em uma posição específica
    */
   getThumbnailAtPosition(x, y) {
+    if (this.thumbnails.length === 0) {
+      return -1;
+    }
+    
     const thumbWidth = 60;
     const thumbHeight = 45;
     const spacing = 10;
+    const maxVisible = Math.floor((y < 10 || y > 10 + thumbHeight + 15) ? -1 : (document.getElementById('history-canvas').width - spacing) / (thumbWidth + spacing));
+    
+    // Determina quais miniaturas estão visíveis
+    let startIndex = 0;
+    if (this.thumbnails.length > maxVisible) {
+      startIndex = Math.max(0, this.position - Math.floor(maxVisible / 2));
+      startIndex = Math.min(startIndex, this.thumbnails.length - maxVisible);
+    }
     
     // Verifica se a posição está dentro da área da miniatura
     if (y < 10 || y > 10 + thumbHeight) {
@@ -180,10 +237,11 @@ class HistoryManager {
     }
     
     // Calcula o índice
-    const index = Math.floor((x - spacing) / (thumbWidth + spacing));
+    const visibleIndex = Math.floor((x - spacing) / (thumbWidth + spacing));
+    const index = startIndex + visibleIndex;
     
     // Verifica se o índice é válido
-    if (index < 0 || index >= this.thumbnails.length) {
+    if (visibleIndex < 0 || index >= this.thumbnails.length) {
       return -1;
     }
     

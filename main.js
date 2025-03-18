@@ -1,9 +1,9 @@
 /**
- * LGPD Document Protector - Versão otimizada
+ * LGPD Document Protector - Versão melhorada
  * Script principal da aplicação
  */
 document.addEventListener("DOMContentLoaded", () => {
-  // Elementos DOM - Verificando se existem antes de usar
+  // Elementos DOM
   const mainCanvas = document.getElementById("main-canvas");
   const historyCanvas = document.getElementById("history-canvas");
   const statusMessage = document.getElementById("status-message");
@@ -21,6 +21,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeToggleBtn = document.getElementById("theme-toggle");
   const autoSaveToggle = document.getElementById("auto-save-toggle");
   const autoSaveIntervalSelect = document.getElementById("auto-save-interval");
+  const highQualityToggle = document.getElementById("high-quality-toggle");
+  const loadingOverlay = document.getElementById("loading-overlay");
+  const loadingMessage = document.getElementById("loading-message");
 
   // Verifica se todos os elementos necessários existem
   if (!mainCanvas || !historyCanvas) {
@@ -56,8 +59,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let startY = 0;
   let isDarkMode = false;
   let isPdfLoaded = false;
-  let currentPage = 0;
-  let totalPages = 0;
   let autoSaveEnabled = false;
   let autoSaveInterval = 5;
   let autoSaveTimer = null;
@@ -67,6 +68,23 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastPanY = 0;
   let lastRenderTime = 0;
   let animationFrameId = null;
+  let isDebuggingMask = false;
+  let keyboardShortcutsEnabled = true;
+
+  // Mostra o overlay de carregamento
+  function showLoading(message = "Carregando...") {
+    if (loadingOverlay && loadingMessage) {
+      loadingMessage.textContent = message;
+      loadingOverlay.style.display = "flex";
+    }
+  }
+
+  // Esconde o overlay de carregamento
+  function hideLoading() {
+    if (loadingOverlay) {
+      loadingOverlay.style.display = "none";
+    }
+  }
 
   // Inicializa o tamanho do canvas
   function updateCanvasSize() {
@@ -116,13 +134,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const now = performance.now();
         
         // Limita a taxa de atualização para evitar sobrecarga
-        if (now - lastRenderTime < 16 && !isDrawing) { // ~60fps quando não está desenhando
+        if (now - lastRenderTime &lt; 16 && !isDrawing) { // ~60fps quando não está desenhando
           renderPending = false;
           return;
         }
         
         if (imageProcessor.hasImage()) {
-          imageProcessor.drawToCanvas(ctx, blurIntensity, blurIterations, scaleFactor, offsetX, offsetY);
+          if (isDebuggingMask) {
+            imageProcessor.debugShowMask(ctx);
+          } else {
+            imageProcessor.drawToCanvas(ctx, blurIntensity, blurIterations, scaleFactor, offsetX, offsetY);
+          }
         }
         
         lastRenderTime = now;
@@ -247,6 +269,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Alterna a qualidade do blur
+  function toggleHighQuality() {
+    try {
+      if (!highQualityToggle) return;
+      
+      const highQuality = highQualityToggle.checked;
+      imageProcessor.setHighQuality(highQuality);
+      
+      // Atualiza o canvas
+      updateCanvas();
+      
+      updateStatus(`Qualidade de blur: ${highQuality ? 'Alta' : 'Padrão'}`);
+    } catch (error) {
+      console.error("Erro ao alternar qualidade do blur:", error);
+    }
+  }
+
   // Mostra o modal de informações da LGPD
   function showLgpdInfo() {
     try {
@@ -275,6 +314,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const file = event.target.files[0];
       if (!file) return;
 
+      showLoading("Carregando imagem...");
       updateStatus("Carregando imagem...");
 
       imageProcessor
@@ -300,14 +340,20 @@ document.addEventListener("DOMContentLoaded", () => {
           // Atualiza o canvas
           updateCanvas();
 
+          hideLoading();
           updateStatus(`Imagem carregada: ${file.name}`);
         })
         .catch((error) => {
           console.error("Erro ao carregar imagem:", error);
+          hideLoading();
           updateStatus(`Erro ao carregar imagem: ${error.message}`, 8000);
         });
     } catch (error) {
+      console.error("Erro ao processar upload de arquivo:", error  8000);
+        });
+    } catch (error) {
       console.error("Erro ao processar upload de arquivo:", error);
+      hideLoading();
       updateStatus("Erro ao processar arquivo", 8000);
     }
   }
@@ -318,100 +364,45 @@ document.addEventListener("DOMContentLoaded", () => {
       const file = event.target.files[0];
       if (!file) return;
 
+      showLoading("Processando PDF... Isso pode levar alguns segundos.");
       updateStatus("Processando PDF... Isso pode levar alguns segundos.");
 
-      // Em uma implementação real, usaríamos uma biblioteca como PDF.js
-      // Para esta demonstração, vamos simular
-      setTimeout(() => {
-        try {
-          // Cria uma imagem placeholder
-          const img = new Image();
-          img.crossOrigin = "anonymous"; // Evita problemas de CORS
+      imageProcessor
+        .loadPDF(file)
+        .then((result) => {
+          // Reseta o histórico
+          historyManager.reset();
+
+          // Define o estado do PDF
+          isPdfLoaded = true;
           
-          img.onload = () => {
-            try {
-              // Cria um canvas para converter a imagem em um blob
-              const canvas = document.createElement("canvas");
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const tempCtx = canvas.getContext("2d");
-              
-              if (!tempCtx) {
-                throw new Error("Não foi possível criar contexto para processamento de PDF");
-              }
-              
-              tempCtx.drawImage(img, 0, 0);
+          if (pdfNavigation && pageIndicator) {
+            pdfNavigation.style.display = "flex";
+            pageIndicator.textContent = `Página ${result.pageNumber}/${result.totalPages}`;
+          }
 
-              // Converte o canvas em um blob
-              canvas.toBlob((blob) => {
-                try {
-                  if (!blob) {
-                    throw new Error("Falha ao converter PDF para imagem");
-                  }
-                  
-                  // Cria um arquivo a partir do blob
-                  const imgFile = new File([blob], "pdf-page.png", { type: "image/png" });
+          // Reseta a visualização
+          scaleFactor = 1.0;
+          offsetX = 0;
+          offsetY = 0;
 
-                  // Carrega a imagem
-                  imageProcessor.loadImage(imgFile).then(() => {
-                    // Reseta o histórico
-                    historyManager.reset();
+          // Adiciona o estado inicial ao histórico
+          addToHistory();
 
-                    // Define o estado do PDF
-                    isPdfLoaded = true;
-                    currentPage = 1;
-                    totalPages = 3; // Simulando 3 páginas
-                    
-                    if (pdfNavigation && pageIndicator) {
-                      pdfNavigation.style.display = "flex";
-                      pageIndicator.textContent = `Página ${currentPage}/${totalPages}`;
-                    }
+          // Atualiza o canvas
+          updateCanvas();
 
-                    // Reseta a visualização
-                    scaleFactor = 1.0;
-                    offsetX = 0;
-                    offsetY = 0;
-
-                    // Adiciona o estado inicial ao histórico
-                    addToHistory();
-
-                    // Atualiza o canvas
-                    updateCanvas();
-
-                    updateStatus(`PDF carregado: ${file.name} - Página ${currentPage}/${totalPages}`);
-                  }).catch(error => {
-                    console.error("Erro ao processar página do PDF:", error);
-                    updateStatus("Erro ao processar página do PDF", 8000);
-                  });
-                } catch (error) {
-                  console.error("Erro ao processar blob do PDF:", error);
-                  updateStatus("Erro ao processar PDF", 8000);
-                }
-              }, "image/png");
-            } catch (error) {
-              console.error("Erro ao processar imagem do PDF:", error);
-              updateStatus("Erro ao processar PDF", 8000);
-            }
-          };
-
-          img.onerror = (error) => {
-            console.error("Erro ao carregar imagem do PDF:", error);
-            updateStatus("Erro ao carregar PDF", 8000);
-          };
-
-          // Carrega uma imagem placeholder
-          img.src =
-            "data:image/svg+xml;charset=UTF-8," +
-            encodeURIComponent(
-              '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><rect width="800" height="600" fill="#f0f0f0"/><text x="400" y="300" font-family="Arial" font-size="30" text-anchor="middle">Página do PDF</text></svg>'
-            );
-        } catch (error) {
+          hideLoading();
+          updateStatus(`PDF carregado: ${file.name} - Página ${result.pageNumber}/${result.totalPages}`);
+        })
+        .catch((error) => {
           console.error("Erro ao processar PDF:", error);
-          updateStatus("Erro ao processar PDF", 8000);
-        }
-      }, 1000);
+          hideLoading();
+          updateStatus(`Erro ao processar PDF: ${error.message}`, 8000);
+        });
     } catch (error) {
       console.error("Erro ao processar upload de PDF:", error);
+      hideLoading();
       updateStatus("Erro ao processar PDF", 8000);
     }
   }
@@ -424,8 +415,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      showLoading("Salvando imagem...");
+
       // Obtém a URL de dados da imagem com blur aplicado
-      const dataUrl = imageProcessor.saveImage(blurIntensity);
+      const dataUrl = imageProcessor.saveImage(blurIntensity, blurIterations);
       
       if (!dataUrl) {
         throw new Error("Falha ao gerar imagem para download");
@@ -435,11 +428,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const link = document.createElement("a");
       link.download = "lgpd-protected-image.png";
       link.href = dataUrl;
-      link.click();
-
-      updateStatus("Imagem salva com sucesso");
+      
+      // Pequeno timeout para garantir que o UI seja atualizado
+      setTimeout(() => {
+        link.click();
+        hideLoading();
+        updateStatus("Imagem salva com sucesso");
+      }, 500);
     } catch (error) {
       console.error("Erro ao salvar imagem:", error);
+      hideLoading();
       updateStatus("Erro ao salvar imagem", 8000);
     }
   }
@@ -631,13 +629,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // Transfere a máscara temporária para a máscara principal
-      imageProcessor.commitTempMask();
+      const changed = imageProcessor.commitTempMask();
 
       // Atualiza o canvas
       updateCanvas();
 
-      // Adiciona ao histórico
-      addToHistory();
+      // Adiciona ao histórico apenas se houve mudança
+      if (changed) {
+        addToHistory();
+      }
 
       isDrawing = false;
     } catch (error) {
@@ -713,6 +713,7 @@ document.addEventListener("DOMContentLoaded", () => {
           imageProcessor.maskCanvas = mask;
           updateCanvas();
           updateHistoryThumbnails();
+          updateStatus(`Histórico: estado ${index + 1}`);
         }
       }
     } catch (error) {
@@ -794,14 +795,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      showLoading("Detectando informações sensíveis...");
       updateStatus("Detectando informações sensíveis...");
 
-      // Em uma implementação real, usaríamos OCR para detectar informações sensíveis
-      // Para esta demonstração, vamos simular com regiões aleatórias
-      setTimeout(() => {
-        try {
-          const regions = imageProcessor.simulateDetectSensitiveInfo();
-
+      imageProcessor.detectSensitiveInfo()
+        .then(regions => {
           if (regions.length > 0) {
             // Aplica blur nas regiões detectadas
             imageProcessor.applyBlurToSensitiveRegions(regions);
@@ -812,17 +810,21 @@ document.addEventListener("DOMContentLoaded", () => {
             // Adiciona ao histórico
             addToHistory();
 
+            hideLoading();
             updateStatus(`${regions.length} regiões sensíveis detectadas e borradas`);
           } else {
+            hideLoading();
             updateStatus("Nenhuma informação sensível detectada");
           }
-        } catch (error) {
+        })
+        .catch(error => {
           console.error("Erro ao detectar informações sensíveis:", error);
+          hideLoading();
           updateStatus("Erro ao detectar informações sensíveis", 8000);
-        }
-      }, 1000);
+        });
     } catch (error) {
       console.error("Erro ao iniciar detecção:", error);
+      hideLoading();
       updateStatus("Erro ao iniciar detecção", 8000);
     }
   }
@@ -869,184 +871,84 @@ document.addEventListener("DOMContentLoaded", () => {
   // Navegação do PDF
   function handlePrevPage() {
     try {
-      if (isPdfLoaded && currentPage > 1) {
-        currentPage--;
-        if (pageIndicator) {
-          pageIndicator.textContent = `Página ${currentPage}/${totalPages}`;
-        }
-
-        // Em uma implementação real, carregaríamos a página anterior
-        // Para esta demonstração, vamos simular
-        updateStatus(`Carregando página ${currentPage}...`);
-
-        setTimeout(() => {
-          try {
-            // Cria uma imagem placeholder
-            const img = new Image();
-            img.crossOrigin = "anonymous"; // Evita problemas de CORS
-            
-            img.onload = () => {
-              try {
-                // Cria um canvas para converter a imagem em um blob
-                const canvas = document.createElement("canvas");
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const tempCtx = canvas.getContext("2d");
-                
-                if (!tempCtx) {
-                  throw new Error("Não foi possível criar contexto para processamento de PDF");
-                }
-                
-                tempCtx.drawImage(img, 0, 0);
-
-                // Converte o canvas em um blob
-                canvas.toBlob((blob) => {
-                  try {
-                    if (!blob) {
-                      throw new Error("Falha ao converter PDF para imagem");
-                    }
-                    
-                    // Cria um arquivo a partir do blob
-                    const imgFile = new File([blob], "pdf-page.png", { type: "image/png" });
-
-                    // Carrega a imagem
-                    imageProcessor.loadImage(imgFile).then(() => {
-                      // Reseta o histórico
-                      historyManager.reset();
-
-                      // Adiciona o estado inicial ao histórico
-                      addToHistory();
-
-                      // Atualiza o canvas
-                      updateCanvas();
-
-                      updateStatus(`PDF - Página ${currentPage}/${totalPages}`);
-                    }).catch(error => {
-                      console.error("Erro ao processar página do PDF:", error);
-                      updateStatus("Erro ao processar página do PDF", 8000);
-                    });
-                  } catch (error) {
-                    console.error("Erro ao processar blob do PDF:", error);
-                    updateStatus("Erro ao processar PDF", 8000);
-                  }
-                }, "image/png");
-              } catch (error) {
-                console.error("Erro ao processar imagem do PDF:", error);
-                updateStatus("Erro ao processar PDF", 8000);
-              }
-            };
-
-            img.onerror = (error) => {
-              console.error("Erro ao carregar imagem do PDF:", error);
-              updateStatus("Erro ao carregar PDF", 8000);
-            };
-
-            // Carrega uma imagem placeholder
-            img.src =
-              "data:image/svg+xml;charset=UTF-8," +
-              encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><rect width="800" height="600" fill="#f0f0f0"/><text x="400" y="300" font-family="Arial" font-size="30" text-anchor="middle">Página ${currentPage} do PDF</text></svg>`
-              );
-          } catch (error) {
-            console.error("Erro ao processar página anterior do PDF:", error);
-            updateStatus("Erro ao carregar página anterior", 8000);
+      if (!isPdfLoaded) return;
+      
+      const currentPage = imageProcessor.currentPage;
+      if (currentPage <= 1) return;
+      
+      showLoading(`Carregando página ${currentPage - 1}...`);
+      updateStatus(`Carregando página ${currentPage - 1}...`);
+      
+      imageProcessor.loadPDFPage(currentPage - 1)
+        .then(result => {
+          // Reseta o histórico
+          historyManager.reset();
+          
+          // Adiciona o estado inicial ao histórico
+          addToHistory();
+          
+          // Atualiza o indicador de página
+          if (pageIndicator) {
+            pageIndicator.textContent = `Página ${result.pageNumber}/${result.totalPages}`;
           }
-        }, 500);
-      }
+          
+          // Atualiza o canvas
+          updateCanvas();
+          
+          hideLoading();
+          updateStatus(`PDF - Página ${result.pageNumber}/${result.totalPages}`);
+        })
+        .catch(error => {
+          console.error("Erro ao carregar página anterior:", error);
+          hideLoading();
+          updateStatus("Erro ao carregar página anterior", 8000);
+        });
     } catch (error) {
       console.error("Erro ao navegar para página anterior:", error);
+      hideLoading();
       updateStatus("Erro ao navegar para página anterior", 8000);
     }
   }
 
   function handleNextPage() {
     try {
-      if (isPdfLoaded && currentPage < totalPages) {
-        currentPage++;
-        if (pageIndicator) {
-          pageIndicator.textContent = `Página ${currentPage}/${totalPages}`;
-        }
-
-        // Em uma implementação real, carregaríamos a próxima página
-        // Para esta demonstração, vamos simular
-        updateStatus(`Carregando página ${currentPage}...`);
-
-        setTimeout(() => {
-          try {
-            // Cria uma imagem placeholder
-            const img = new Image();
-            img.crossOrigin = "anonymous"; // Evita problemas de CORS
-            
-            img.onload = () => {
-              try {
-                // Cria um canvas para converter a imagem em um blob
-                const canvas = document.createElement("canvas");
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const tempCtx = canvas.getContext("2d");
-                
-                if (!tempCtx) {
-                  throw new Error("Não foi possível criar contexto para processamento de PDF");
-                }
-                
-                tempCtx.drawImage(img, 0, 0);
-
-                // Converte o canvas em um blob
-                canvas.toBlob((blob) => {
-                  try {
-                    if (!blob) {
-                      throw new Error("Falha ao converter PDF para imagem");
-                    }
-                    
-                    // Cria um arquivo a partir do blob
-                    const imgFile = new File([blob], "pdf-page.png", { type: "image/png" });
-
-                    // Carrega a imagem
-                    imageProcessor.loadImage(imgFile).then(() => {
-                      // Reseta o histórico
-                      historyManager.reset();
-
-                      // Adiciona o estado inicial ao histórico
-                      addToHistory();
-
-                      // Atualiza o canvas
-                      updateCanvas();
-
-                      updateStatus(`PDF - Página ${currentPage}/${totalPages}`);
-                    }).catch(error => {
-                      console.error("Erro ao processar página do PDF:", error);
-                      updateStatus("Erro ao processar página do PDF", 8000);
-                    });
-                  } catch (error) {
-                    console.error("Erro ao processar blob do PDF:", error);
-                    updateStatus("Erro ao processar PDF", 8000);
-                  }
-                }, "image/png");
-              } catch (error) {
-                console.error("Erro ao processar imagem do PDF:", error);
-                updateStatus("Erro ao processar PDF", 8000);
-              }
-            };
-
-            img.onerror = (error) => {
-              console.error("Erro ao carregar imagem do PDF:", error);
-              updateStatus("Erro ao carregar PDF", 8000);
-            };
-
-            // Carrega uma imagem placeholder
-            img.src =
-              "data:image/svg+xml;charset=UTF-8," +
-              encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><rect width="800" height="600" fill="#f0f0f0"/><text x="400" y="300" font-family="Arial" font-size="30" text-anchor="middle">Página ${currentPage} do PDF</text></svg>`
-              );
-          } catch (error) {
-            console.error("Erro ao processar próxima página do PDF:", error);
-            updateStatus("Erro ao carregar próxima página", 8000);
+      if (!isPdfLoaded) return;
+      
+      const currentPage = imageProcessor.currentPage;
+      const totalPages = imageProcessor.totalPages;
+      
+      if (currentPage >= totalPages) return;
+      
+      showLoading(`Carregando página ${currentPage + 1}...`);
+      updateStatus(`Carregando página ${currentPage + 1}...`);
+      
+      imageProcessor.loadPDFPage(currentPage + 1)
+        .then(result => {
+          // Reseta o histórico
+          historyManager.reset();
+          
+          // Adiciona o estado inicial ao histórico
+          addToHistory();
+          
+          // Atualiza o indicador de página
+          if (pageIndicator) {
+            pageIndicator.textContent = `Página ${result.pageNumber}/${result.totalPages}`;
           }
-        }, 500);
-      }
+          
+          // Atualiza o canvas
+          updateCanvas();
+          
+          hideLoading();
+          updateStatus(`PDF - Página ${result.pageNumber}/${result.totalPages}`);
+        })
+        .catch(error => {
+          console.error("Erro ao carregar próxima página:", error);
+          hideLoading();
+          updateStatus("Erro ao carregar próxima página", 8000);
+        });
     } catch (error) {
       console.error("Erro ao navegar para próxima página:", error);
+      hideLoading();
       updateStatus("Erro ao navegar para próxima página", 8000);
     }
   }
@@ -1055,6 +957,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function changeTool(tool) {
     try {
       currentTool = tool;
+      
+      // Atualiza a seleção visual
+      document.querySelectorAll('input[name="tool"]').forEach((radio) => {
+        if (radio.value === tool) {
+          radio.checked = true;
+        }
+      });
+      
       updateStatus(`Ferramenta selecionada: ${tool}`);
     } catch (error) {
       console.error("Erro ao mudar ferramenta:", error);
@@ -1107,6 +1017,92 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Manipula atalhos de teclado
+  function handleKeyDown(event) {
+    if (!keyboardShortcutsEnabled) return;
+    
+    try {
+      // Ignora atalhos se algum input estiver focado
+      if (document.activeElement.tagName === 'INPUT' || 
+          document.activeElement.tagName === 'TEXTAREA' || 
+          document.activeElement.tagName === 'SELECT') {
+        return;
+      }
+      
+      // Ctrl+Z: Desfazer
+      if (event.ctrlKey && event.key === 'z') {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+      
+      // Ctrl+Y: Refazer
+      if (event.ctrlKey && event.key === 'y') {
+        event.preventDefault();
+        handleRedo();
+        return;
+      }
+      
+      // Ctrl+S: Salvar
+      if (event.ctrlKey && event.key === 's') {
+        event.preventDefault();
+        saveImage();
+        return;
+      }
+      
+      // B: Ferramenta Pincel
+      if (event.key === 'b' || event.key === 'B') {
+        changeTool('brush');
+        return;
+      }
+      
+      // R: Ferramenta Retângulo
+      if (event.key === 'r' || event.key === 'R') {
+        changeTool('rectangle');
+        return;
+      }
+      
+      // E: Ferramenta Elipse
+      if (event.key === 'e' || event.key === 'E') {
+        changeTool('ellipse');
+        return;
+      }
+      
+      // +: Zoom In
+      if (event.key === '+' || event.key === '=') {
+        handleZoomIn();
+        return;
+      }
+      
+      // -: Zoom Out
+      if (event.key === '-' || event.key === '_') {
+        handleZoomOut();
+        return;
+      }
+      
+      // 0: Resetar Zoom
+      if (event.key === '0') {
+        handleZoomReset();
+        return;
+      }
+      
+      // Setas esquerda/direita: Navegação de PDF
+      if (isPdfLoaded) {
+        if (event.key === 'ArrowLeft') {
+          handlePrevPage();
+          return;
+        }
+        
+        if (event.key === 'ArrowRight') {
+          handleNextPage();
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao processar atalho de teclado:", error);
+    }
+  }
+
   // Inicializa a aplicação
   function init() {
     try {
@@ -1115,6 +1111,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Configura os event listeners
       window.addEventListener("resize", updateCanvasSize);
+      window.addEventListener("keydown", handleKeyDown);
 
       // Alternância de abas
       document.querySelectorAll(".tab-button").forEach((button) => {
@@ -1180,6 +1177,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (autoSaveIntervalSelect) {
         autoSaveIntervalSelect.addEventListener("change", updateAutoSaveInterval);
+      }
+
+      // Qualidade do blur
+      if (highQualityToggle) {
+        highQualityToggle.addEventListener("change", toggleHighQuality);
       }
 
       // Operações de edição
