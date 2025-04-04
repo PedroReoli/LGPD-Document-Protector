@@ -44,7 +44,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.6;
   color: var(--text-color);
   background-color: var(--bg-color);
@@ -250,12 +250,15 @@ header {
   color: var(--primary-color);
 }
 
-.sidebar-section p, .sidebar-section ul, .sidebar-section ol {
+.sidebar-section p,
+.sidebar-section ul,
+.sidebar-section ol {
   margin-bottom: 1rem;
   color: var(--text-light);
 }
 
-.sidebar-section ul, .sidebar-section ol {
+.sidebar-section ul,
+.sidebar-section ol {
   padding-left: 1.5rem;
 }
 
@@ -553,8 +556,12 @@ footer {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 #loading-message {
@@ -587,13 +594,13 @@ footer {
   .main-content {
     flex-direction: row;
   }
-  
+
   .sidebar {
     width: 300px;
     border-top: none;
     border-left: 1px solid var(--border-color);
   }
-  
+
   .history-container {
     order: -1;
     width: 100%;
@@ -608,16 +615,16 @@ footer {
     gap: 1rem;
     padding: 1rem;
   }
-  
+
   .header-actions {
     width: 100%;
     justify-content: center;
   }
-  
+
   .tab-button {
     padding: 0.75rem 1rem;
   }
-  
+
   .modal-content {
     margin: 5% auto;
     padding: 15px;
@@ -629,17 +636,17 @@ footer {
   .tool-options {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .btn {
     padding: 0.5rem;
     font-size: 0.8rem;
   }
-  
+
   .header-actions {
     flex-wrap: wrap;
     gap: 0.5rem;
   }
-  
+
   .action-buttons {
     grid-template-columns: 1fr;
   }
@@ -647,11 +654,18 @@ footer {
 
 /* Animations */
 @keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .pulse {
   animation: pulse 2s infinite;
 }
+
